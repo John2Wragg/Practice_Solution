@@ -15,8 +15,8 @@ def main(run_name="test_run"):
     feature_selection_dict = {}
     for model in ["nil", "sev"]:
         target = NIL_TARGET if model == "nil" else TARGET_COL
-        features = run_rfe(train, features, target, model)
-        feature_selection_dict[model] = features
+        model_features = run_rfe(train, features, target, model)
+        feature_selection_dict[model] = model_features
     
     # Run modelbuilder
     mb = ModelBuilder(
