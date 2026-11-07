@@ -15,8 +15,10 @@ from params.targets import TARGET_COL
 import os
 import json
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+
 
 def main(run_name: str):
 
@@ -26,9 +28,7 @@ def main(run_name: str):
     for folder in [base_model_folder, shap_folder, ave_sev_folder]:
         os.makedirs(folder, exist_ok=True)
 
-    mb = ModelBuilder.load(
-    os.path.join(base_model_folder, f"{run_name}.joblib")
-    )
+    mb = ModelBuilder.load(os.path.join(base_model_folder, f"{run_name}.joblib"))
     # Test predictions
     train = pl.read_parquet(
         r"/Users/johnwragg/Desktop/DS_work/Hastings_Solution/Prepped_Data/train.parquet"
@@ -46,7 +46,9 @@ def main(run_name: str):
     # SHAP plots
     for model in ["nil", "sev"]:
         fig = shap_plot(mb, train, model=model)
-        fig.savefig(os.path.join(shap_folder, f"shap_{model}.png"), dpi=150, bbox_inches="tight")
+        fig.savefig(
+            os.path.join(shap_folder, f"shap_{model}.png"), dpi=150, bbox_inches="tight"
+        )
         plt.close(fig)
 
     # AvE by feature (severity model) -> AvE/sev/<feature>.csv + one combined AvE/sev/ave_sev.html
@@ -62,23 +64,31 @@ def main(run_name: str):
         ave_sev_feature.write_csv(os.path.join(ave_sev_folder, f"{feature}.csv"))
         # Embed plotly.js only once (with the first plot) so the file stays small and works offline
         plot_divs.append(
-            plot_ave(ave_sev_feature).to_html(full_html=False, include_plotlyjs=(i == 0))
+            plot_ave(ave_sev_feature).to_html(
+                full_html=False, include_plotlyjs=(i == 0)
+            )
         )
-    
+
     write_AvE_to_experiments(ave_sev_folder, plot_divs, run_name)
 
     # overall metrics
     sev_metrics_dict = sev_metrics(comparison_test)
     nil_metrics_dict = nil_metrics(comparison_test)
-    for name, metrics in [("sev_metrics", sev_metrics_dict), ("nil_metrics", nil_metrics_dict)]:
+    for name, metrics in [
+        ("sev_metrics", sev_metrics_dict),
+        ("nil_metrics", nil_metrics_dict),
+    ]:
         with open(os.path.join(base_model_folder, f"{name}.json"), "w") as f:
             json.dump(metrics, f, indent=2, default=float)
 
     # Metrics by year sample
     metrics_table_nil = metrics_table(comparison_train, comparison_test, nil_metrics)
     metrics_table_sev = metrics_table(comparison_train, comparison_test, sev_metrics)
-    for name, df in zip(["nil_metrics_df", "sev_metrics_df"], [metrics_table_nil, metrics_table_sev]):
+    for name, df in zip(
+        ["nil_metrics_df", "sev_metrics_df"], [metrics_table_nil, metrics_table_sev]
+    ):
         df.write_csv(os.path.join(base_model_folder, f"{name}.csv"))
 
+
 if __name__ == "__main__":
-    main("test_run") # hardcoded for now but allow argparse
+    main("test_run")  # hardcoded for now but allow argparse

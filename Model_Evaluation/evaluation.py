@@ -127,7 +127,7 @@ def metrics_table(train, test, metric_fn):
 
 
 def write_AvE_to_experiments(experiment_dir: str, plots, run_name: str) -> None:
-    
+
     with open(os.path.join(experiment_dir, "ave_sev.html"), "w") as f:
         f.write(
             f"<html><head><meta charset='utf-8'><title>AvE - severity - {run_name}</title></head>"

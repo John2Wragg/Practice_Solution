@@ -4,7 +4,7 @@ from params.generic_params import DO_NOT_MODEL
 from params.targets import NIL_TARGET, TARGET_COL
 import polars as pl
 
-# TODO: Implement HPT in a simple script 
+# TODO: Implement HPT in a simple script
 MODEL_PARAMS = dict(
     n_estimators=400,
     learning_rate=0.03,
@@ -50,9 +50,7 @@ def main(run_name="test_run"):
 
     mb.fit(train)
 
-    mb.save(
-       os.path.join(base_model_folder, f"{run_name}.joblib")
-    )
+    mb.save(os.path.join(base_model_folder, f"{run_name}.joblib"))
 
 
 if __name__ == "__main__":
