@@ -30,7 +30,6 @@ class Dataloader:
         clean = self.prepare(raw)
         # validate with the Pandera schema here
         return clean
-    
 
     def prepare(self, data):
         return (
@@ -45,10 +44,15 @@ class Dataloader:
             .pipe(add_tp_features)
             .pipe(cast_strings_to_categorical)
         )
-    
-    def split_data(self, data: pl.DataFrame, test_size: Optional[float] = 0.2, seed: Optional[int] = 42) -> Tuple[pl.DataFrame, pl.DataFrame]:
+
+    def split_data(
+        self,
+        data: pl.DataFrame,
+        test_size: Optional[float] = 0.2,
+        seed: Optional[int] = 42,
+    ) -> Tuple[pl.DataFrame, pl.DataFrame]:
         """Split data for train test split.
-        
+
         Args:
         -----
 
@@ -58,22 +62,23 @@ class Dataloader:
             Default 0.2
         seed:
             Default 42
-        
+
         Returns:
         --------
 
         Tuple of train, test pl.DataFrames
-        
+
         """
-        
+
         strata = (
-            pl.when(pl.col(self.target) == 0).then(pl.lit("nil"))
-            .when(pl.col(self.target) == CAP_VALUE).then(pl.lit("large"))
+            pl.when(pl.col(self.target) == 0)
+            .then(pl.lit("nil"))
+            .when(pl.col(self.target) == CAP_VALUE)
+            .then(pl.lit("large"))
             .otherwise(pl.lit("normal"))
-        ) # change to capped value
+        )  # change to capped value
         labels = data.select(strata.alias("s"))["s"].to_list()
         train_idx, test_idx = train_test_split(
             range(len(data)), test_size=test_size, random_state=seed, stratify=labels
         )
         return data[train_idx], data[test_idx]
-
