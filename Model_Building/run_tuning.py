@@ -10,6 +10,8 @@ import lightgbm as lgb
 import os
 import json
 
+#Source: https://machinelearningmastery.com/how-to-perform-scikit-learn-hyperparameter-optimization-with-optuna/
+
 def main(run_name):
 
     base_model_folder = rf"/Users/johnwragg/Desktop/DS_work/Hastings_Solution/Model_Experiments/{run_name}"
