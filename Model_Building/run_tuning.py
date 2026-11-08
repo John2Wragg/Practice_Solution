@@ -1,6 +1,5 @@
 
 import optuna
-from sklearn.model_selection import cross_val_score
 from lightgbm import LGBMClassifier, LGBMRegressor
 import polars as pl 
 from params.targets import NIL_TARGET, TARGET_COL
@@ -9,6 +8,8 @@ from Model_Building.rfe_cv import run_rfe
 import lightgbm as lgb
 import os
 import json
+from sklearn.model_selection import cross_val_score, StratifiedKFold, KFold
+
 
 #Source: https://machinelearningmastery.com/how-to-perform-scikit-learn-hyperparameter-optimization-with-optuna/
 
@@ -56,8 +57,9 @@ def main(run_name):
             objective="binary",
             verbose=-1,
         )
-
-        score = cross_val_score(clf, X_train_nil, y_train_nil, cv=3, scoring="accuracy").mean()
+        # nil
+        cv_nil = StratifiedKFold(5, shuffle=True, random_state=42)
+        score = cross_val_score(clf, X_train_nil, y_train_nil, cv=cv_nil, scoring="roc_auc").mean()
         return score
 
 
@@ -93,10 +95,11 @@ def main(run_name):
             verbose=-1,
         )
 
-        # accuracy is a classification metric; use gamma deviance for a gamma regressor
-        # (sklearn returns it negated, so higher is better -> direction="maximize")
+
+        # sev
+        cv_sev = KFold(5, shuffle=True, random_state=42)
         score = cross_val_score(
-            reg, X_train_sev, y_train_sev, cv=3, scoring="neg_mean_gamma_deviance"
+            reg, X_train_sev, y_train_sev, cv=cv_sev, scoring="neg_mean_gamma_deviance"
         ).mean()
         return score
 
