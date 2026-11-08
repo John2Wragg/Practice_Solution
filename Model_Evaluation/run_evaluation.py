@@ -18,7 +18,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
 def main(run_name: str):
 
@@ -70,6 +70,20 @@ def main(run_name: str):
         )
 
     write_AvE_to_experiments(ave_sev_folder, plot_divs, run_name)
+
+    # Confusion matrix
+    comparison_test = comparison_test.with_columns(pl.when(pl.col("p_nonnil") > 0.5).then(1).otherwise(0).alias("non_zero_claim_label_pred"))
+    cm = confusion_matrix(comparison_test["non_zero_claim_flag"], comparison_test["non_zero_claim_label_pred"], labels=mb.nil_model.classes_)
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm,
+                                display_labels=mb.nil_model.classes_)
+    
+    conf_matrix_plot = os.path.join(base_model_folder, "confusion_matrix.png")
+    
+    # has to be called before saving to generate plot
+    disp.plot()
+
+    disp.figure_.savefig(conf_matrix_plot)
+
 
     # overall metrics
     sev_metrics_dict = sev_metrics(comparison_test)
