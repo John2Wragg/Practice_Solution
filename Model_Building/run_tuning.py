@@ -22,16 +22,17 @@ def main(run_name):
 
     features = [col for col in train.columns if col not in DO_NOT_MODEL]
 
-    # run rfe for each model
-    feature_selection_dict = {}
-    for model in ["nil", "sev"]:
-        target = NIL_TARGET if model == "nil" else TARGET_COL
-        model_features = run_rfe(train, features, target, model)
-        feature_selection_dict[model] = model_features
+    feature_selection_path = os.path.join(base_model_folder, "model_features.json")
+    if not os.path.exists(feature_selection_path):
+        raise FileNotFoundError(
+            f"No feature selection found at {feature_selection_path}. Run run_rfe_cv.py for '{run_name}' first."
+        )
+    with open(feature_selection_path) as f:
+        feature_selection_dict = json.load(f)
+        nil_features = feature_selection_dict["nil"]
+        sev_features = feature_selection_dict["sev"]
 
-
-    # For nil model
-    nil_features = feature_selection_dict["nil"]
+    # for nil model
 
     y_train_nil = train[NIL_TARGET].to_numpy()
     X_train_nil = train.select(nil_features).to_pandas()
@@ -65,9 +66,8 @@ def main(run_name):
 
     print("Best hyperparameters:", study_nil.best_params)
     print("Best accuracy:", study_nil.best_value)
+    
     # For sev model
-
-    sev_features = feature_selection_dict["sev"]
     train_sev = train.filter(pl.col(NIL_TARGET) == 1)
 
     y_train_sev = train_sev[TARGET_COL].to_numpy()
@@ -119,3 +119,6 @@ def main(run_name):
         json.dump(best_params, f, indent=2)
     
     print(f"Saved best params to {params_path}")
+
+if __name__ == "__main__":
+    main(run_name="test_run")

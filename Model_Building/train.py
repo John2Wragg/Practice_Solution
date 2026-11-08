@@ -19,6 +19,16 @@ def main(run_name="test_run"):
 
     features = [col for col in train.columns if col not in DO_NOT_MODEL]
 
+    feature_selection_path = os.path.join(base_model_folder, "model_features.json")
+    if not os.path.exists(feature_selection_path):
+        raise FileNotFoundError(
+            f"No feature selection found at {feature_selection_path}. Run run_rfe_cv.py for '{run_name}' first."
+        )
+    with open(feature_selection_path) as f:
+        feature_selection_dict = json.load(f)
+        nil_features = feature_selection_dict["nil"]
+        sev_features = feature_selection_dict["sev"]
+
     # Load hpt trial for model_experiment
     params_path = os.path.join(base_model_folder, "best_params.json")
     if not os.path.exists(params_path):
@@ -30,18 +40,11 @@ def main(run_name="test_run"):
     nil_params = best_params["nil"]
     sev_params = best_params["sev"]
 
-    # run rfe for each model TODO: Put this separately so RFE is ran before tuning and features are loaded
-    feature_selection_dict = {}
-    for model in ["nil", "sev"]:
-        target = NIL_TARGET if model == "nil" else TARGET_COL
-        model_features = run_rfe(train, features, target, model)
-        feature_selection_dict[model] = model_features
-
     # Run modelbuilder
     mb = ModelBuilder(
-        nil_features=feature_selection_dict["nil"],
+        nil_features=nil_features,
         nil_params=nil_params,
-        sev_features=feature_selection_dict["sev"],
+        sev_features=sev_features,
         sev_params=sev_params,
     )
 
