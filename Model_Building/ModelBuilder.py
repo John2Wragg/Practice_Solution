@@ -5,7 +5,7 @@ import pandas as pd
 import polars as pl
 from typing import List
 
-from params.targets import NIL_TARGET, TARGET_COL
+from params.targets import NIL_TARGET, TARGET_COL, LARGE_LOSS_TARGET
 
 
 class ModelBuilder:
@@ -22,6 +22,8 @@ class ModelBuilder:
         nil_params: dict,
         sev_features: list[str],
         sev_params: dict,
+        large_loss_features: list[str],
+        large_loss_params: dict,
         year_col: str = "loss_year",
         monotone_increasing: list[str] | None = None,
         seed: int = 42,
@@ -30,6 +32,8 @@ class ModelBuilder:
         self.nil_params = nil_params
         self.sev_features = sev_features
         self.sev_params = sev_params
+        self.large_loss_features = large_loss_features
+        self.large_loss_params = large_loss_params
         self.year_col = year_col
         self.monotone_increasing = set(monotone_increasing or [])
         self.seed = seed
@@ -54,20 +58,31 @@ class ModelBuilder:
     def _monotone_constraints(self, features: List[str]) -> list[int]:
         return [1 if f in self.monotone_increasing else 0 for f in features]
 
+
+    def fit_classifier(self, data: pl.DataFrame, target: str, constraints: List[list[int]], features: List[str], params: Dict[str, int]) -> lgb.LGBMClassifier:
+
+        y_class = data[target].to_numpy()
+        model = lgb.LGBMClassifier(
+            objective="binary",
+            interaction_constraints=constraints,
+            random_state=self.seed,
+            verbose=-1,
+            **params,
+        ).fit(self._X(data, features), y_class)
+
+        return model
+
     def fit(self, train: pl.DataFrame) -> "ModelBuilder":
         constraints_nil = self._interaction_constraints(self.nil_features)
 
+        # TODO: Make this a fit_classifier() method so I can recall this to fit and make a larg loss classifier
         # Part A: nil model on all training claims
-        y_nil = train[NIL_TARGET].to_numpy()
-        self.nil_model = lgb.LGBMClassifier(
-            objective="binary",
-            interaction_constraints=constraints_nil,
-            random_state=self.seed,
-            verbose=-1,
-            **self.nil_params,
-        ).fit(self._X(train, self.nil_features), y_nil)
+
+        self.nil_model = self.fit_classifier(train, target=NIL_TARGET, constraints=constraints_nil, features=self.nil_features, params=self.nil_params)
+
 
         # Part B: severity model on positive training claims, capped target
+        # TODO: make this a fit regressor() so I can fit a large loss model to this as well. 
         pos = train.filter(pl.col(NIL_TARGET) == 1)
         constraints_sev = self._interaction_constraints(self.sev_features)
         self.sev_model = lgb.LGBMRegressor(
@@ -88,6 +103,11 @@ class ModelBuilder:
 
         # Large-loss load from training data only
         self.large_loss_load = pos["Incurred"].mean() / pos[TARGET_COL].mean()
+        
+        # Fit large loss classifier
+        constraints_large_loss = self._interaction_constraints(self.large_loss_features)
+        self.large_loss_model = self.fit_classifier(train, target=LARGE_LOSS_TARGET, constraints=constraints_large_loss, features=self.large_loss_features, params=self.large_loss_params)
+        
         return self
 
     # ---------- prediction ----------
@@ -110,14 +130,18 @@ class ModelBuilder:
 
         X_nil = self._X(data, self.nil_features)
         X_sev = self._X(data, self.sev_features)
+        X_large_loss = self._X(data, self.large_loss_features)
         p = self.nil_model.predict_proba(X_nil)[:, 1]
         sev = self.sev_model.predict(X_sev) * self.sev_balance
+        p_large_loss = self.large_loss_model.predict_proba(X_large_loss)[:, 1]
+
         return pl.DataFrame(
             {
                 "p_nonnil": p,
                 "severity_capped": sev,
                 "expected_capped": p * sev,
                 "expected_cost": p * sev * self.large_loss_load,
+                "p_large_loss": p_large_loss,
             }
         )
 

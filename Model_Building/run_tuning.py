@@ -2,7 +2,7 @@
 import optuna
 from lightgbm import LGBMClassifier, LGBMRegressor
 import polars as pl 
-from params.targets import NIL_TARGET, TARGET_COL
+from params.targets import NIL_TARGET, TARGET_COL, LARGE_LOSS_TARGET
 from params.generic_params import DO_NOT_MODEL
 from Model_Building.rfe_cv import run_rfe
 import lightgbm as lgb
@@ -18,7 +18,7 @@ def main(run_name):
     base_model_folder = rf"/Users/johnwragg/Desktop/DS_work/Hastings_Solution/Model_Experiments/{run_name}"
     # Setup model run
     train = pl.read_parquet(
-        "/Users/johnwragg/Desktop/DS_work/Hastings_Solution/Prepped_Data/train.parquet"
+        "/Users/johnwragg/Desktop/DS_work/Hastings_Solution/Prepped_Data/train_large_loss.parquet"
     )
 
     features = [col for col in train.columns if col not in DO_NOT_MODEL]
@@ -32,6 +32,7 @@ def main(run_name):
         feature_selection_dict = json.load(f)
         nil_features = feature_selection_dict["nil"]
         sev_features = feature_selection_dict["sev"]
+        large_loss_features = feature_selection_dict["large_loss"]
 
     # for nil model
 
@@ -110,11 +111,49 @@ def main(run_name):
     print("Best hyperparameters:", study_sev.best_params)
     print("Best neg gamma deviance:", study_sev.best_value)
 
+    # For large loss
+    
+    y_train_large_loss = train[LARGE_LOSS_TARGET].to_numpy()
+    X_train_large_loss = train.select(large_loss_features).to_pandas()
+
+    year_idx = large_loss_features.index("loss_year")
+    others = [i for i in range(len(large_loss_features)) if i != year_idx]
+    large_loss_interaction_constraints = [[year_idx], others]  # year in own interaction group
+
+    def objective_large_loss(trial):
+        
+        n_estimators = trial.suggest_int("n_estimators", 10, 200)
+        max_depth = trial.suggest_int("max_depth", 2, 32, log=True)
+        min_child_samples = trial.suggest_int("min_child_samples", 5, 100)
+
+        clf = LGBMClassifier(
+            n_estimators=n_estimators,
+            max_depth=max_depth,
+            min_child_samples=min_child_samples,
+            random_state=42,
+            interaction_constraints=large_loss_interaction_constraints,
+            objective="binary",
+            verbose=-1,
+        )
+        # nil
+        cv_large_loss = StratifiedKFold(5, shuffle=True, random_state=42)
+        score = cross_val_score(clf, X_train_large_loss, y_train_large_loss, cv=cv_large_loss, scoring="roc_auc").mean()
+        return score
+
+
+    study_large_loss = optuna.create_study(direction="maximize")
+    study_large_loss.optimize(objective_nil, n_trials=5)
+
+    print("Best hyperparameters:", study_large_loss.best_params)
+    print("Best accuracy:", study_large_loss.best_value)
+
+
     # save outputs to model experiment folder
     os.makedirs(base_model_folder, exist_ok=True)
     best_params = {
         "nil": study_nil.best_params,
         "sev": study_sev.best_params,
+        "large_loss": study_large_loss.best_params
     }
 
     params_path = os.path.join(base_model_folder, "best_params.json")
@@ -124,4 +163,4 @@ def main(run_name):
     print(f"Saved best params to {params_path}")
 
 if __name__ == "__main__":
-    main(run_name="test_run")
+    main(run_name="large_loss")

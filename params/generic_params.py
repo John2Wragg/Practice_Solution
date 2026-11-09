@@ -4,5 +4,6 @@ DO_NOT_MODEL = [
     "Capped_Incurred",
     "non_zero_claim_flag",
     "date_of_loss",
+    "Large_Loss_Flag"
 ]
 CAP_VALUE = 50000

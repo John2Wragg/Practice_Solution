@@ -14,7 +14,7 @@ def main(run_name="test_run"):
 
     # Setup model run
     train = pl.read_parquet(
-        "/Users/johnwragg/Desktop/DS_work/Hastings_Solution/Prepped_Data/train.parquet"
+        "/Users/johnwragg/Desktop/DS_work/Hastings_Solution/Prepped_Data/train_large_loss.parquet"
     )
 
     features = [col for col in train.columns if col not in DO_NOT_MODEL]
@@ -28,6 +28,7 @@ def main(run_name="test_run"):
         feature_selection_dict = json.load(f)
         nil_features = feature_selection_dict["nil"]
         sev_features = feature_selection_dict["sev"]
+        large_loss_features = feature_selection_dict["large_loss"]
 
     # Load hpt trial for model_experiment
     params_path = os.path.join(base_model_folder, "best_params.json")
@@ -39,6 +40,7 @@ def main(run_name="test_run"):
         best_params = json.load(f)
     nil_params = best_params["nil"]
     sev_params = best_params["sev"]
+    large_loss_params = best_params["large_loss"]
 
     # Run modelbuilder
     mb = ModelBuilder(
@@ -46,6 +48,8 @@ def main(run_name="test_run"):
         nil_params=nil_params,
         sev_features=sev_features,
         sev_params=sev_params,
+        large_loss_features=large_loss_features,
+        large_loss_params=large_loss_params
     )
 
     mb.fit(train)
@@ -54,4 +58,4 @@ def main(run_name="test_run"):
 
 
 if __name__ == "__main__":
-    main()
+    main(run_name="large_loss")

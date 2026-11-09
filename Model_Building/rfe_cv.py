@@ -11,7 +11,7 @@ from params.targets import NIL_TARGET
 def run_rfe(data: pl.DataFrame, features: List[str], target: str, model_type: str):
     min_features_to_select = 1  # Minimum number of features to consider
 
-    if model_type == "nil":
+    if model_type in ["nil", "large_loss"]:
         cv = StratifiedKFold(5, shuffle=True, random_state=42)
         estimator = LGBMClassifier(verbose=-1, random_state=42, objective="binary")
     else:
@@ -31,7 +31,7 @@ def run_rfe(data: pl.DataFrame, features: List[str], target: str, model_type: st
         estimator=estimator,
         step=1,
         cv=cv,
-        scoring="roc_auc" if model_type == "nil" else "neg_mean_gamma_deviance",
+        scoring="roc_auc" if model_type in ["nil", "large_loss"] else "neg_mean_gamma_deviance",
         min_features_to_select=min_features_to_select,
         n_jobs=2,
     )

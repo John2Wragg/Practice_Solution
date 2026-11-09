@@ -2,7 +2,7 @@ from Model_Building.rfe_cv import run_rfe
 import json 
 import os 
 import polars as pl
-from params.targets import NIL_TARGET, TARGET_COL
+from params.targets import NIL_TARGET, TARGET_COL, LARGE_LOSS_TARGET
 from params.generic_params import DO_NOT_MODEL
 
 def main(run_name="test_run"):
@@ -12,17 +12,24 @@ def main(run_name="test_run"):
 
     # Setup model run
     train = pl.read_parquet(
-        "/Users/johnwragg/Desktop/DS_work/Hastings_Solution/Prepped_Data/train.parquet"
+        "/Users/johnwragg/Desktop/DS_work/Hastings_Solution/Prepped_Data/train_large_loss.parquet"
     )
 
     features = [col for col in train.columns if col not in DO_NOT_MODEL]
 
     
     feature_selection_dict = {}
-    for model in ["nil", "sev"]:
-        target = NIL_TARGET if model == "nil" else TARGET_COL
+    
+    MODEL_TARGETS = {
+    "nil": NIL_TARGET,
+    "sev": TARGET_COL,
+    "large_loss": LARGE_LOSS_TARGET,
+}
+
+    for model, target in MODEL_TARGETS.items():
         model_features = run_rfe(train, features, target, model)
         feature_selection_dict[model] = model_features
+
     
     # save features to model experiment folder
     os.makedirs(base_model_folder, exist_ok=True)
@@ -32,4 +39,4 @@ def main(run_name="test_run"):
 
 
 if __name__ == "__main__":
-    main("test_run")
+    main("large_loss")

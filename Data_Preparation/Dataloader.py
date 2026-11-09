@@ -14,6 +14,7 @@ from functions.dataloader_helpers import (
     add_tp_features,
     cast_strings_to_categorical,
     ph_considered_at_fault_correction,
+    create_large_loss_flag,
 )
 from sklearn.model_selection import train_test_split
 from params.targets import TARGET_COL
@@ -43,6 +44,7 @@ class Dataloader:
             .pipe(ph_considered_at_fault_correction)
             .pipe(add_tp_features)
             .pipe(cast_strings_to_categorical)
+            .pipe(create_large_loss_flag)
         )
 
     def split_data(

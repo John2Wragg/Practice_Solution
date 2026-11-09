@@ -102,3 +102,6 @@ def add_tp_features(data: pl.DataFrame) -> pl.DataFrame:
         .cast(pl.Categorical),
         tp_region_total=pl.sum_horizontal(region_cols),
     ).drop(["TP_type_bike", "TP_type_pedestrian", "TP_type_cyclist", *region_cols])
+
+def create_large_loss_flag(data: pl.DataFrame) -> pl.DataFrame:
+    return data.with_columns(pl.when(pl.col("Incurred") > 50000).then(1).otherwise(0).alias("Large_Loss_Flag"))
