@@ -1,7 +1,7 @@
 import numpy as np
 import polars as pl
 import pandas as pd
-from params.targets import NIL_TARGET, TARGET_COL
+from params.targets import NIL_TARGET, TARGET_COL, LARGE_LOSS_TARGET
 import shap
 import matplotlib.pyplot as plt
 import plotly.express as px
@@ -152,3 +152,75 @@ def youden_threshold(y_true: np.ndarray, p: np.ndarray) -> float:
     """Threshold for confusion matrix which is max distance between roc and diagnoal."""
     fpr, tpr, thr = roc_curve(y_true, p)
     return float(thr[np.argmax(tpr - fpr)])
+
+
+def ave_summary(data: pl.DataFrame) -> pl.DataFrame:
+    """Return table for Actual vs expected totals"""
+    pos = data.filter(pl.col(NIL_TARGET) == 1)
+    excess = data["Incurred"] - data[TARGET_COL]
+
+    summary = {
+        "non-nil claims": (data[NIL_TARGET].sum(), data["p_nonnil"].sum()),
+        "severity (non-nil claims)": (pos[TARGET_COL].sum(), pos["severity_capped"].sum()),
+        "capped cost": (data[TARGET_COL].sum(), data["expected_capped"].sum()),
+        "large claims": (data[LARGE_LOSS_TARGET].sum(), data["p_large_loss"].sum()),
+        "excess over cap": (excess.sum(), data["expected_excess"].sum()),
+        "total incurred": (data["Incurred"].sum(), data["expected_cost"].sum()),
+        "total incurred (flat load)": (data["Incurred"].sum(), data["expected_cost_flat_load"].sum()),
+    }
+
+    return pl.DataFrame(
+        {
+            "measure": list(summary.keys()),
+            "actual": [float(a) for a, _ in summary.values()],
+            "expected": [float(e) for _, e in summary.values()],
+        }
+    ).with_columns(a_over_e=pl.col("actual") / pl.col("expected"))
+
+
+def ave_by_group(data: pl.DataFrame, group: str, target: str = "Incurred", pred: str = "expected_cost") -> pl.DataFrame:
+    """Return grouped actual vs expected by each level in a col."""
+    return (
+        data.group_by(group)
+        .agg(
+            pl.len().alias("claims"),
+            pl.col(target).sum().alias("actual"),
+            pl.col(pred).sum().alias("expected"),
+        )
+        .with_columns(a_over_e=pl.col("actual") / pl.col("expected"))
+        .sort(group)
+    )
+
+def expected_ultimate_loss(
+    mb,
+    data: pl.DataFrame,
+    rebase_year: int | None = None,
+    inflation_factor: float = 0.0,
+) -> pl.DataFrame:
+    """Expected ultimate loss per claim. Caluclated as expected_capped + expected_excess.
+
+    rebase_year can be set to score every claim at a set level for live scoring.
+    """
+    preds = mb.predict(data, rebase_year=rebase_year)
+    eul_data = pl.concat([data.select("Claim_Number", "loss_year", "Incurred"), preds], how="horizontal")
+
+    return eul_data.with_columns(eul=pl.col("expected_cost") * (1 + inflation_factor))
+
+
+def eul_by_year(data: pl.DataFrame) -> pl.DataFrame:
+    """EUL compared to actual loss by year."""
+    by_year = ave_by_group(data, "loss_year", target="Incurred", pred="eul").with_columns(
+        pl.col("loss_year").cast(pl.String)
+    )
+
+    # Get overall totals for comparison across all data
+    total = pl.DataFrame(
+        {
+            "loss_year": ["total"],
+            "claims": [data.height],
+            "actual": [data["Incurred"].sum()],
+            "expected": [data["eul"].sum()],
+        },
+        schema=by_year.drop("a_over_e").schema,
+    ).with_columns(a_over_e=pl.col("actual") / pl.col("expected"))
+    return pl.concat([by_year, total])

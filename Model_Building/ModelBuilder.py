@@ -41,6 +41,7 @@ class ModelBuilder:
         self.nil_model: lgb.LGBMClassifier | None = None
         self.sev_model: lgb.LGBMRegressor | None = None
         self.large_loss_load: float | None = None
+        self.mean_excess: float | None = None
         self.sev_balance: float | None = None
 
     # ---------- helpers ----------
@@ -103,9 +104,13 @@ class ModelBuilder:
         X_pos = self._X(pos, self.sev_features)
         self.sev_balance = pos[TARGET_COL].sum() / self.sev_model.predict(X_pos).sum()
 
-        # Large-loss load from training data only
+        # Large-loss load from training data only - keep for comparison
         self.large_loss_load = pos["Incurred"].mean() / pos[TARGET_COL].mean()
         
+        # Average excess for large claims
+        large = train.filter(pl.col(LARGE_LOSS_TARGET) == 1)
+        self.mean_excess = (large["Incurred"] - large[TARGET_COL]).mean()
+
         # Fit large loss classifier
         constraints_large_loss = self._interaction_constraints(self.large_loss_features)
         self.large_loss_model = self.fit_classifier(train, target=LARGE_LOSS_TARGET, constraints=constraints_large_loss, features=self.large_loss_features, params=self.large_loss_params)
@@ -137,13 +142,18 @@ class ModelBuilder:
         sev = self.sev_model.predict(X_sev) * self.sev_balance
         p_large_loss = self.large_loss_model.predict_proba(X_large_loss)[:, 1]
 
+        expected_capped = p * sev
+        expected_excess = p_large_loss * self.mean_excess
+
         return pl.DataFrame(
             {
                 "p_nonnil": p,
                 "severity_capped": sev,
-                "expected_capped": p * sev,
-                "expected_cost": p * sev * self.large_loss_load,
+                "expected_capped": expected_capped,
                 "p_large_loss": p_large_loss,
+                "expected_excess": expected_excess,
+                "expected_cost": expected_capped + expected_excess,
+                "expected_cost_flat_load": expected_capped * self.large_loss_load, # Keep for comparison 
             }
         )
 

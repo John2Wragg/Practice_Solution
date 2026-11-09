@@ -11,8 +11,13 @@ from Model_Evaluation.evaluation import (
     plot_ave,
     write_AvE_to_experiments,
     youden_threshold,
+    ave_summary,
+    ave_by_group,
+    expected_ultimate_loss,
+    eul_by_year,
 )
 from params.targets import TARGET_COL, LARGE_LOSS_TARGET, NIL_TARGET
+from params.generic_params import REBASE_YEAR, CLAIMS_INFLATION, TARGET_YEAR
 import os
 import json
 import matplotlib
@@ -26,7 +31,8 @@ def main(run_name: str):
     base_model_folder = rf"/Users/johnwragg/Desktop/DS_work/Hastings_Solution/Model_Experiments/{run_name}"
     shap_folder = os.path.join(base_model_folder, "shap")
     ave_sev_folder = os.path.join(base_model_folder, "AvE", "sev")
-    for folder in [base_model_folder, shap_folder, ave_sev_folder]:
+    ave_total_folder = os.path.join(base_model_folder, "AvE", "totals")
+    for folder in [base_model_folder, shap_folder, ave_sev_folder, ave_total_folder]:
         os.makedirs(folder, exist_ok=True)
 
     mb = ModelBuilder.load(os.path.join(base_model_folder, f"{run_name}.joblib"))
@@ -118,6 +124,16 @@ def main(run_name: str):
     ):
         df.write_csv(os.path.join(base_model_folder, f"{name}.csv"))
 
+    # AvE for all data
+    for sample, data in [("train", comparison_train), ("test", comparison_test)]:
+        ave_summary(data).write_csv(os.path.join(ave_total_folder, f"summary_{sample}.csv"))
+
+    # Generate AvE by loss years
+    ave_by_group(comparison_test, "loss_year").write_csv(os.path.join(ave_total_folder, "loss_year_test.csv"))
+
+    # EUL summry 
+    eul_test = expected_ultimate_loss(mb, test)
+    eul_by_year(eul_test).write_csv(os.path.join(base_model_folder, "eul_test.csv"))
 
 if __name__ == "__main__":
     main("large_loss")  # hardcoded for now but allow argparse
