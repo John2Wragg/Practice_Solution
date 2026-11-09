@@ -17,7 +17,6 @@ uv sync
 - `Model_Evaluation/`: 
 - `Model_Experiments/`: 
 - `Prepped_Data/`: 
-- `Snips/`: 
 
 ## Data Preparation
 - Contains `Dataloader.py` class which loads and transforms the raw data. Including train test split. Helper functions can be found in `functions.dataloader_helpers.py`. 
