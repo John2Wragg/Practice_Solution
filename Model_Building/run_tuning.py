@@ -142,7 +142,7 @@ def main(run_name):
 
 
     study_large_loss = optuna.create_study(direction="maximize")
-    study_large_loss.optimize(objective_nil, n_trials=5)
+    study_large_loss.optimize(objective_large_loss, n_trials=5)
 
     print("Best hyperparameters:", study_large_loss.best_params)
     print("Best accuracy:", study_large_loss.best_value)

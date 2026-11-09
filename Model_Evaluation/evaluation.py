@@ -41,7 +41,7 @@ def shap_plot(mb, data: pl.DataFrame, model_key: str):
 
     shap.plots.beeswarm(shap_values, show=False)
     fig = plt.gcf()
-    fig.suptitle(f"SHAP summary - {'severity' if is_sev else {model_key}} model")
+    fig.suptitle(f"SHAP summary - {'severity' if is_sev else model_key} model")
     return fig
 
 
