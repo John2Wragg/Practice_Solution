@@ -77,7 +77,6 @@ class ModelBuilder:
     def fit(self, train: pl.DataFrame) -> "ModelBuilder":
         constraints_nil = self._interaction_constraints(self.nil_features)
 
-        # TODO: Make this a fit_classifier() method so I can recall this to fit and make a larg loss classifier
         # Part A: nil model on all training claims
 
         self.nil_model = self.fit_classifier(train, target=NIL_TARGET, constraints=constraints_nil, features=self.nil_features, params=self.nil_params)
