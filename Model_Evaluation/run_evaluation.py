@@ -1,3 +1,4 @@
+from functools import partial
 import polars as pl
 from Model_Building.ModelBuilder import ModelBuilder
 import plotly.express as px
@@ -16,6 +17,8 @@ from Model_Evaluation.evaluation import (
     expected_ultimate_loss,
     eul_by_year,
     large_loss_approach_gini_metrics,
+    roc_and_calibration,
+    eul_metrics,
 )
 from params.targets import TARGET_COL, LARGE_LOSS_TARGET, NIL_TARGET
 from params.generic_params import REBASE_YEAR, CLAIMS_INFLATION, TARGET_YEAR
@@ -82,7 +85,7 @@ def main(run_name: str):
     # Confusion matrix
     thresh_nil = youden_threshold(comparison_train[NIL_TARGET], comparison_train["p_nonnil"])
 
-    comparison_test = comparison_test.with_columns(pl.when(pl.col("p_nonnil") > thresh_nil).then(1).otherwise(0).alias("non_zero_claim_label_pred"))
+    comparison_test = comparison_test.with_columns(pl.when(pl.col("p_nonnil") >= thresh_nil).then(1).otherwise(0).alias("non_zero_claim_label_pred"))
     cm = confusion_matrix(comparison_test[NIL_TARGET], comparison_test["non_zero_claim_label_pred"], labels=mb.nil_model.classes_)
     disp = ConfusionMatrixDisplay(confusion_matrix=cm,
                                 display_labels=mb.nil_model.classes_)
@@ -92,11 +95,11 @@ def main(run_name: str):
 
     # Confusion matrix for large loss
     thresh_large_loss = youden_threshold(comparison_train[LARGE_LOSS_TARGET], comparison_train["p_large_loss"])
-    comparison_test = comparison_test.with_columns(pl.when(pl.col("p_large_loss") > thresh_large_loss).then(1).otherwise(0).alias("large_loss_label_pred"))
+    comparison_test = comparison_test.with_columns(pl.when(pl.col("p_large_loss") >= thresh_large_loss).then(1).otherwise(0).alias("large_loss_label_pred"))
     cm_large_loss = confusion_matrix(comparison_test[LARGE_LOSS_TARGET], comparison_test["large_loss_label_pred"], labels=mb.large_loss_model.classes_)
     disp_large_loss = ConfusionMatrixDisplay(confusion_matrix=cm_large_loss,
                                 display_labels=mb.large_loss_model.classes_)
-    
+
     conf_matrix_plot_large_loss = os.path.join(base_model_folder, "confusion_matrix_large_loss.png")
 
     # has to be called before saving to generate plot
@@ -107,20 +110,32 @@ def main(run_name: str):
     disp_large_loss.plot()
     disp_large_loss.figure_.savefig(conf_matrix_plot_large_loss)
 
+    fig = roc_and_calibration(comparison_test[NIL_TARGET], comparison_test["p_nonnil"], "Nil model")
+    fig.savefig(os.path.join(base_model_folder, "roc_calibration_nil.png"), dpi=150)
+
+    fig = roc_and_calibration(comparison_test[LARGE_LOSS_TARGET], comparison_test["p_large_loss"],
+                            "Large loss model", max_prob=0.25)
+    fig.savefig(os.path.join(base_model_folder, "roc_calibration_large_loss.png"), dpi=150)
+    
+
     # overall metrics
     sev_metrics_dict = sev_metrics(comparison_test)
     nil_metrics_dict = nil_metrics(comparison_test, threshold=thresh_nil)
     large_loss_metrics_dict = large_loss_approach_gini_metrics(comparison_test)
+    eul_metrics_dict = eul_metrics(comparison_test)
     for name, metrics in [
         ("sev_metrics", sev_metrics_dict),
         ("nil_metrics", nil_metrics_dict),
-        ("large_loss_metrics", large_loss_metrics_dict), 
+        ("large_loss_metrics", large_loss_metrics_dict),
+        ("EUL_metrics", eul_metrics_dict) 
     ]:
         with open(os.path.join(base_model_folder, f"{name}.json"), "w") as f:
             json.dump(metrics, f, indent=2, default=float)
 
     # Metrics by year sample
-    metrics_table_nil = metrics_table(comparison_train, comparison_test, nil_metrics)
+    metrics_table_nil = metrics_table(
+        comparison_train, comparison_test, partial(nil_metrics, threshold=thresh_nil)
+    )
     metrics_table_sev = metrics_table(comparison_train, comparison_test, sev_metrics)
     for name, df in zip(
         ["nil_metrics_df", "sev_metrics_df"], [metrics_table_nil, metrics_table_sev]

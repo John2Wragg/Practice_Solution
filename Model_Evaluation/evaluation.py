@@ -15,8 +15,11 @@ from sklearn.metrics import (
     recall_score,
     roc_auc_score,
     roc_curve,
+    RocCurveDisplay,
+    mean_absolute_error,
 )
 import os
+from sklearn.calibration import CalibrationDisplay
 
 
 def shap_plot(mb, data: pl.DataFrame, model_key: str):
@@ -231,3 +234,29 @@ def eul_by_year(data: pl.DataFrame) -> pl.DataFrame:
         schema=by_year.drop("a_over_e").schema,
     ).with_columns(a_over_e=pl.col("actual") / pl.col("expected"))
     return pl.concat([by_year, total])
+
+
+def roc_and_calibration(y_true, y_pred, title, max_prob=1.0):
+    fig, (ax_roc, ax_cal) = plt.subplots(1, 2, figsize=(10, 4.5))
+    RocCurveDisplay.from_predictions(y_true, y_pred, ax=ax_roc, name=title, plot_chance_level=True)
+    CalibrationDisplay.from_predictions(y_true, y_prob=y_pred, n_bins=10, strategy="quantile", ax=ax_cal, name=title)
+    ax_cal.set_xlim(0, max_prob)
+    ax_cal.set_ylim(0, max_prob)
+    ax_roc.set_title("ROC curve")
+    ax_cal.set_title("Calibration (10 equal-sized bands)")
+    fig.tight_layout()
+    return fig
+
+def eul_metrics(data: pl.DataFrame) -> Dict:
+    actual = data["Incurred"].to_numpy()
+    pred = data["expected_cost"].to_numpy()
+    top_decile = pred >= np.quantile(pred, 0.9)
+    return {
+        "claims": data.height,
+        "actual_total": actual.sum(),
+        "predicted_total": pred.sum(),
+        "a_over_e": actual.sum() / pred.sum(),
+        "gini": gini(actual, pred),
+        "mae": mean_absolute_error(actual, pred),
+        "top_decile_cost_share": actual[top_decile].sum() / actual.sum(),
+    }
