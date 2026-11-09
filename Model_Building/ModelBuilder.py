@@ -67,6 +67,7 @@ class ModelBuilder:
             interaction_constraints=constraints,
             random_state=self.seed,
             verbose=-1,
+            subsample_freq=1,
             **params,
         ).fit(self._X(data, features), y_class)
 
@@ -91,6 +92,7 @@ class ModelBuilder:
             monotone_constraints=self._monotone_constraints(self.sev_features),
             random_state=self.seed,
             verbose=-1,
+            subsample_freq=1,
             **self.sev_params,
         ).fit(
             self._X(pos, self.sev_features),

@@ -45,27 +45,32 @@ def main(run_name):
 
 
     def objective_nil(trial):
-        n_estimators = trial.suggest_int("n_estimators", 10, 200)
-        max_depth = trial.suggest_int("max_depth", 2, 32, log=True)
-        min_child_samples = trial.suggest_int("min_child_samples", 5, 100)
+        params = {
+            "num_leaves": trial.suggest_int("num_leaves", 4, 32),
+            "reg_lambda": trial.suggest_float("reg_lambda", 1e-2, 100.0, log=True),
+            "learning_rate": trial.suggest_float("learning_rate", 0.005, 0.2, log=True),
+            "n_estimators": trial.suggest_int("n_estimators", 50, 800),
+            "min_child_samples": trial.suggest_int("min_child_samples", 20, 200),
+            "subsample": trial.suggest_float("subsample", 0.6, 1.0),
+            "subsample_freq": 1,
+            "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
+        }
 
         clf = LGBMClassifier(
-            n_estimators=n_estimators,
-            max_depth=max_depth,
-            min_child_samples=min_child_samples,
             random_state=42,
             interaction_constraints=nil_interaction_constraints,
             objective="binary",
             verbose=-1,
+            **params,
         )
         # nil
         cv_nil = StratifiedKFold(5, shuffle=True, random_state=42)
-        score = cross_val_score(clf, X_train_nil, y_train_nil, cv=cv_nil, scoring="roc_auc").mean()
+        score = cross_val_score(clf, X_train_nil, y_train_nil, cv=cv_nil, scoring="neg_log_loss").mean()
         return score
 
 
     study_nil = optuna.create_study(direction="maximize")
-    study_nil.optimize(objective_nil, n_trials=5)
+    study_nil.optimize(objective_nil, n_trials=10)
 
     print("Best hyperparameters:", study_nil.best_params)
     print("Best accuracy:", study_nil.best_value)
@@ -82,18 +87,23 @@ def main(run_name):
 
 
     def objective_sev(trial):
-        n_estimators = trial.suggest_int("n_estimators", 10, 200)
-        max_depth = trial.suggest_int("max_depth", 2, 32, log=True)
-        min_child_samples = trial.suggest_int("min_child_samples", 5, 100)
+        params = {
+            "num_leaves": trial.suggest_int("num_leaves", 4, 32),
+            "reg_lambda": trial.suggest_float("reg_lambda", 1e-2, 100.0, log=True),
+            "learning_rate": trial.suggest_float("learning_rate", 0.005, 0.2, log=True),
+            "n_estimators": trial.suggest_int("n_estimators", 50, 800),
+            "min_child_samples": trial.suggest_int("min_child_samples", 20, 200),
+            "subsample": trial.suggest_float("subsample", 0.6, 1.0),
+            "subsample_freq": 1,
+            "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
+        }
 
         reg = LGBMRegressor(
-            n_estimators=n_estimators,
-            max_depth=max_depth,
-            min_child_samples=min_child_samples,
             random_state=42,
             interaction_constraints=sev_interaction_constraints,
             objective="gamma",
             verbose=-1,
+            **params,
         )
 
 
@@ -106,7 +116,7 @@ def main(run_name):
 
 
     study_sev = optuna.create_study(direction="maximize")
-    study_sev.optimize(objective_sev, n_trials=5)
+    study_sev.optimize(objective_sev, n_trials=10)
 
     print("Best hyperparameters:", study_sev.best_params)
     print("Best neg gamma deviance:", study_sev.best_value)
@@ -121,28 +131,32 @@ def main(run_name):
     large_loss_interaction_constraints = [[year_idx], others]  # year in own interaction group
 
     def objective_large_loss(trial):
-        
-        n_estimators = trial.suggest_int("n_estimators", 10, 200)
-        max_depth = trial.suggest_int("max_depth", 2, 32, log=True)
-        min_child_samples = trial.suggest_int("min_child_samples", 5, 100)
+        params = {
+            "num_leaves": trial.suggest_int("num_leaves", 2, 16),
+            "reg_lambda": trial.suggest_float("reg_lambda", 1e-2, 100.0, log=True),
+            "learning_rate": trial.suggest_float("learning_rate", 0.005, 0.2, log=True),
+            "n_estimators": trial.suggest_int("n_estimators", 50, 800),
+            "min_child_samples": trial.suggest_int("min_child_samples", 20, 150),
+            "subsample": trial.suggest_float("subsample", 0.6, 1.0),
+            "subsample_freq": 1,
+            "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
+        }
 
         clf = LGBMClassifier(
-            n_estimators=n_estimators,
-            max_depth=max_depth,
-            min_child_samples=min_child_samples,
             random_state=42,
             interaction_constraints=large_loss_interaction_constraints,
             objective="binary",
             verbose=-1,
+            **params,
         )
         # nil
         cv_large_loss = StratifiedKFold(5, shuffle=True, random_state=42)
-        score = cross_val_score(clf, X_train_large_loss, y_train_large_loss, cv=cv_large_loss, scoring="roc_auc").mean()
+        score = cross_val_score(clf, X_train_large_loss, y_train_large_loss, cv=cv_large_loss, scoring="neg_log_loss").mean()
         return score
 
 
     study_large_loss = optuna.create_study(direction="maximize")
-    study_large_loss.optimize(objective_large_loss, n_trials=5)
+    study_large_loss.optimize(objective_large_loss, n_trials=10)
 
     print("Best hyperparameters:", study_large_loss.best_params)
     print("Best accuracy:", study_large_loss.best_value)
