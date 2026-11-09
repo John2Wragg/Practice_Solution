@@ -10,6 +10,7 @@ from Model_Evaluation.evaluation import (
     AvE_by_feature,
     plot_ave,
     write_AvE_to_experiments,
+    youden_threshold,
 )
 from params.targets import TARGET_COL, LARGE_LOSS_TARGET, NIL_TARGET
 import os
@@ -72,14 +73,19 @@ def main(run_name: str):
     write_AvE_to_experiments(ave_sev_folder, plot_divs, run_name)
 
     # Confusion matrix
-    comparison_test = comparison_test.with_columns(pl.when(pl.col("p_nonnil") > 0.5).then(1).otherwise(0).alias("non_zero_claim_label_pred"))
+    thresh_nil = youden_threshold(comparison_train[NIL_TARGET], comparison_train["p_nonnil"])
+
+    comparison_test = comparison_test.with_columns(pl.when(pl.col("p_nonnil") > thresh_nil).then(1).otherwise(0).alias("non_zero_claim_label_pred"))
     cm = confusion_matrix(comparison_test[NIL_TARGET], comparison_test["non_zero_claim_label_pred"], labels=mb.nil_model.classes_)
     disp = ConfusionMatrixDisplay(confusion_matrix=cm,
                                 display_labels=mb.nil_model.classes_)
     
     conf_matrix_plot = os.path.join(base_model_folder, "confusion_matrix.png")
 
-    comparison_test = comparison_test.with_columns(pl.when(pl.col("p_large_loss") > 0.5).then(1).otherwise(0).alias("large_loss_label_pred"))
+
+    # Confusion matrix for large loss
+    thresh_large_loss = youden_threshold(comparison_train[LARGE_LOSS_TARGET], comparison_train["p_large_loss"])
+    comparison_test = comparison_test.with_columns(pl.when(pl.col("p_large_loss") > thresh_large_loss).then(1).otherwise(0).alias("large_loss_label_pred"))
     cm_large_loss = confusion_matrix(comparison_test[LARGE_LOSS_TARGET], comparison_test["large_loss_label_pred"], labels=mb.large_loss_model.classes_)
     disp_large_loss = ConfusionMatrixDisplay(confusion_matrix=cm_large_loss,
                                 display_labels=mb.large_loss_model.classes_)

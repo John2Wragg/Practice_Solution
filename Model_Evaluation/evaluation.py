@@ -14,6 +14,7 @@ from sklearn.metrics import (
     precision_score,
     recall_score,
     roc_auc_score,
+    roc_curve,
 )
 import os
 
@@ -146,3 +147,8 @@ def write_AvE_to_experiments(experiment_dir: str, plots, run_name: str) -> None:
             + "".join(f"<div style='margin-bottom:40px'>{div}</div>" for div in plots)
             + "</body></html>"
         )
+
+def youden_threshold(y_true: np.ndarray, p: np.ndarray) -> float:
+    """Threshold for confusion matrix which is max distance between roc and diagnoal."""
+    fpr, tpr, thr = roc_curve(y_true, p)
+    return float(thr[np.argmax(tpr - fpr)])
