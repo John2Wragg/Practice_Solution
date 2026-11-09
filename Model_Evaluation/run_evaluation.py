@@ -15,6 +15,7 @@ from Model_Evaluation.evaluation import (
     ave_by_group,
     expected_ultimate_loss,
     eul_by_year,
+    large_loss_approach_gini_metrics,
 )
 from params.targets import TARGET_COL, LARGE_LOSS_TARGET, NIL_TARGET
 from params.generic_params import REBASE_YEAR, CLAIMS_INFLATION, TARGET_YEAR
@@ -108,10 +109,12 @@ def main(run_name: str):
 
     # overall metrics
     sev_metrics_dict = sev_metrics(comparison_test)
-    nil_metrics_dict = nil_metrics(comparison_test)
+    nil_metrics_dict = nil_metrics(comparison_test, threshold=thresh_nil)
+    large_loss_metrics_dict = large_loss_approach_gini_metrics(comparison_test)
     for name, metrics in [
         ("sev_metrics", sev_metrics_dict),
         ("nil_metrics", nil_metrics_dict),
+        ("large_loss_metrics", large_loss_metrics_dict), 
     ]:
         with open(os.path.join(base_model_folder, f"{name}.json"), "w") as f:
             json.dump(metrics, f, indent=2, default=float)

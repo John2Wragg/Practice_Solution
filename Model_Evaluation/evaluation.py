@@ -127,6 +127,13 @@ def nil_metrics(data, threshold=0.5):
         "f1": f1_score(actual, pred),
     }
 
+def large_loss_approach_gini_metrics(data):
+    actual = data["Incurred"].to_numpy()
+
+    return {
+        "gini_flat_model": gini(actual, data["expected_cost_flat_load"].to_numpy()),
+        "gini_large_loss_model" : gini(actual, data["expected_cost"].to_numpy()),
+    }
 
 def metrics_table(train, test, metric_fn):
     rows = []
