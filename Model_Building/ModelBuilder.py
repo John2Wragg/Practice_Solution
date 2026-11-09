@@ -3,7 +3,7 @@ import lightgbm as lgb
 import numpy as np
 import pandas as pd
 import polars as pl
-from typing import List
+from typing import List, Dict
 
 from params.targets import NIL_TARGET, TARGET_COL, LARGE_LOSS_TARGET
 
