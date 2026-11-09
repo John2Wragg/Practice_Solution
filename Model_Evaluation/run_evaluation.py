@@ -21,7 +21,6 @@ from Model_Evaluation.evaluation import (
     eul_metrics,
 )
 from params.targets import TARGET_COL, LARGE_LOSS_TARGET, NIL_TARGET
-from params.generic_params import REBASE_YEAR, CLAIMS_INFLATION, TARGET_YEAR
 import os
 import json
 import matplotlib

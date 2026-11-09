@@ -112,6 +112,7 @@ def sev_metrics(data):
         "claims": rows.height,
         "gini": gini(actual, pred),
         "gamma_pde": d2_tweedie_score(actual, pred, power=2),
+        "mae": mean_absolute_error(actual, pred)
     }
 
 
