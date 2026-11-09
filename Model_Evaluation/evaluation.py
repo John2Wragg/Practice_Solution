@@ -18,10 +18,21 @@ from sklearn.metrics import (
 import os
 
 
-def shap_plot(mb, data: pl.DataFrame, model: str):
-    is_sev = model == "sev"
-    model = mb.sev_model if is_sev else mb.nil_model
-    features = mb.sev_features if is_sev else mb.nil_features
+def shap_plot(mb, data: pl.DataFrame, model_key: str):
+    is_sev = model_key == "sev"
+
+    model_selection = {
+        "sev": {
+            "model" :mb.sev_model, "features": mb.sev_features},
+        "nil": {
+            "model": mb.nil_model, "features": mb.nil_features},
+
+        "large_loss": {
+            "model": mb.large_loss_model, "features": mb.large_loss_features}
+    }
+
+    model = model_selection[model_key]["model"]
+    features = model_selection[model_key]["features"]
     rows = data.filter(pl.col(NIL_TARGET) == 1) if is_sev else data
     X = rows.select(features).to_pandas()
 
@@ -30,7 +41,7 @@ def shap_plot(mb, data: pl.DataFrame, model: str):
 
     shap.plots.beeswarm(shap_values, show=False)
     fig = plt.gcf()
-    fig.suptitle(f"SHAP summary - {'severity' if is_sev else 'nil'} model")
+    fig.suptitle(f"SHAP summary - {'severity' if is_sev else {model_key}} model")
     return fig
 
 

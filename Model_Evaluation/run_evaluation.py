@@ -44,8 +44,8 @@ def main(run_name: str):
     comparison_train = pl.concat([train, preds_train], how="horizontal")
 
     # SHAP plots
-    for model in ["nil", "sev"]:
-        fig = shap_plot(mb, train, model=model)
+    for model in ["nil", "sev", "large_loss"]:
+        fig = shap_plot(mb, train, model_key=model)
         fig.savefig(
             os.path.join(shap_folder, f"shap_{model}.png"), dpi=150, bbox_inches="tight"
         )
