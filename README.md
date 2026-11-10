@@ -1,13 +1,13 @@
 # Hastings Solution
 
 ## Overview
-- 
+- Estimation of EUL using FNOL dataset. 
+- Uses a Hurdle Model to model separate components, giving the EUL prediction. 
 
 ## Setup
 ```bash
 uv sync
 ```
-- 
 
 ## Repo Structure
 - `Data_Preparation/`: 
