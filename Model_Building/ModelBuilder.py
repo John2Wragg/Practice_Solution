@@ -14,7 +14,7 @@ class ModelBuilder:
     Part A (nil model): P(claim > 0), binary objective, fitted on all claims.
     Part B (severity):   E[capped cost | claim > 0], gamma objective, fitted on positive claims.
     Part C (large loss model): P(large_loss)
-    large-loss load = P(large_loss) * mean(Incurred - Capped)
+    large-loss load = P(large_loss) * mean(Incurred - Capped), binary objective, fitted on all claims.
     Expected cost = P(claim > 0) * E[capped cost | > 0] * large-loss load.
     """
 
