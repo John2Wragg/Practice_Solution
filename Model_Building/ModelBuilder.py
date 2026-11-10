@@ -9,10 +9,12 @@ from params.targets import NIL_TARGET, TARGET_COL, LARGE_LOSS_TARGET
 
 
 class ModelBuilder:
-    """Trains both parts of the hurdle model and combines them.
+    """Trains parts of the hurdle model and combines them.
 
     Part A (nil model): P(claim > 0), binary objective, fitted on all claims.
     Part B (severity):   E[capped cost | claim > 0], gamma objective, fitted on positive claims.
+    Part C (large loss model): P(large_loss)
+    large-loss load = P(large_loss) * mean(Incurred - Capped)
     Expected cost = P(claim > 0) * E[capped cost | > 0] * large-loss load.
     """
 
