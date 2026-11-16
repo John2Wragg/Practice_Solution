@@ -1,7 +1,7 @@
 import numpy as np
 import polars as pl
 import pandas as pd
-from params.targets import NIL_TARGET, TARGET_COL
+from params.targets import NIL_TARGET, TARGET_COL, LARGE_LOSS_TARGET
 import shap
 import matplotlib.pyplot as plt
 import plotly.express as px
@@ -14,14 +14,29 @@ from sklearn.metrics import (
     precision_score,
     recall_score,
     roc_auc_score,
+    roc_curve,
+    RocCurveDisplay,
+    mean_absolute_error,
 )
 import os
+from sklearn.calibration import CalibrationDisplay
 
 
-def shap_plot(mb, data: pl.DataFrame, model: str):
-    is_sev = model == "sev"
-    model = mb.sev_model if is_sev else mb.nil_model
-    features = mb.sev_features if is_sev else mb.nil_features
+def shap_plot(mb, data: pl.DataFrame, model_key: str):
+    is_sev = model_key == "sev"
+
+    model_selection = {
+        "sev": {
+            "model" :mb.sev_model, "features": mb.sev_features},
+        "nil": {
+            "model": mb.nil_model, "features": mb.nil_features},
+
+        "large_loss": {
+            "model": mb.large_loss_model, "features": mb.large_loss_features}
+    }
+
+    model = model_selection[model_key]["model"]
+    features = model_selection[model_key]["features"]
     rows = data.filter(pl.col(NIL_TARGET) == 1) if is_sev else data
     X = rows.select(features).to_pandas()
 
@@ -30,7 +45,7 @@ def shap_plot(mb, data: pl.DataFrame, model: str):
 
     shap.plots.beeswarm(shap_values, show=False)
     fig = plt.gcf()
-    fig.suptitle(f"SHAP summary - {'severity' if is_sev else 'nil'} model")
+    fig.suptitle(f"SHAP summary - {'severity' if is_sev else model_key} model")
     return fig
 
 
@@ -97,6 +112,7 @@ def sev_metrics(data):
         "claims": rows.height,
         "gini": gini(actual, pred),
         "gamma_pde": d2_tweedie_score(actual, pred, power=2),
+        "mae": mean_absolute_error(actual, pred)
     }
 
 
@@ -115,6 +131,13 @@ def nil_metrics(data, threshold=0.5):
         "f1": f1_score(actual, pred),
     }
 
+def large_loss_approach_gini_metrics(data):
+    actual = data["Incurred"].to_numpy()
+
+    return {
+        "gini_flat_model": gini(actual, data["expected_cost_flat_load"].to_numpy()),
+        "gini_large_loss_model" : gini(actual, data["expected_cost"].to_numpy()),
+    }
 
 def metrics_table(train, test, metric_fn):
     rows = []
@@ -135,3 +158,106 @@ def write_AvE_to_experiments(experiment_dir: str, plots, run_name: str) -> None:
             + "".join(f"<div style='margin-bottom:40px'>{div}</div>" for div in plots)
             + "</body></html>"
         )
+
+def youden_threshold(y_true: np.ndarray, p: np.ndarray) -> float:
+    """Threshold for confusion matrix which is max distance between roc and diagnoal."""
+    fpr, tpr, thr = roc_curve(y_true, p)
+    return float(thr[np.argmax(tpr - fpr)])
+
+
+def ave_summary(data: pl.DataFrame) -> pl.DataFrame:
+    """Return table for Actual vs expected totals"""
+    pos = data.filter(pl.col(NIL_TARGET) == 1)
+    excess = data["Incurred"] - data[TARGET_COL]
+
+    summary = {
+        "non-nil claims": (data[NIL_TARGET].sum(), data["p_nonnil"].sum()),
+        "severity (non-nil claims)": (pos[TARGET_COL].sum(), pos["severity_capped"].sum()),
+        "capped cost": (data[TARGET_COL].sum(), data["expected_capped"].sum()),
+        "large claims": (data[LARGE_LOSS_TARGET].sum(), data["p_large_loss"].sum()),
+        "excess over cap": (excess.sum(), data["expected_excess"].sum()),
+        "total incurred": (data["Incurred"].sum(), data["expected_cost"].sum()),
+        "total incurred (flat load)": (data["Incurred"].sum(), data["expected_cost_flat_load"].sum()),
+    }
+
+    return pl.DataFrame(
+        {
+            "measure": list(summary.keys()),
+            "actual": [float(a) for a, _ in summary.values()],
+            "expected": [float(e) for _, e in summary.values()],
+        }
+    ).with_columns(a_over_e=pl.col("actual") / pl.col("expected"))
+
+
+def ave_by_group(data: pl.DataFrame, group: str, target: str = "Incurred", pred: str = "expected_cost") -> pl.DataFrame:
+    """Return grouped actual vs expected by each level in a col."""
+    return (
+        data.group_by(group)
+        .agg(
+            pl.len().alias("claims"),
+            pl.col(target).sum().alias("actual"),
+            pl.col(pred).sum().alias("expected"),
+        )
+        .with_columns(a_over_e=pl.col("actual") / pl.col("expected"))
+        .sort(group)
+    )
+
+def expected_ultimate_loss(
+    mb,
+    data: pl.DataFrame,
+    rebase_year: int | None = None,
+    inflation_factor: float = 0.0,
+) -> pl.DataFrame:
+    """Expected ultimate loss per claim. Caluclated as expected_capped + expected_excess.
+
+    rebase_year can be set to score every claim at a set level for live scoring.
+    """
+    preds = mb.predict(data, rebase_year=rebase_year)
+    eul_data = pl.concat([data.select("Claim_Number", "loss_year", "Incurred"), preds], how="horizontal")
+
+    return eul_data.with_columns(eul=pl.col("expected_cost") * (1 + inflation_factor))
+
+
+def eul_by_year(data: pl.DataFrame) -> pl.DataFrame:
+    """EUL compared to actual loss by year."""
+    by_year = ave_by_group(data, "loss_year", target="Incurred", pred="eul").with_columns(
+        pl.col("loss_year").cast(pl.String)
+    )
+
+    # Get overall totals for comparison across all data
+    total = pl.DataFrame(
+        {
+            "loss_year": ["total"],
+            "claims": [data.height],
+            "actual": [data["Incurred"].sum()],
+            "expected": [data["eul"].sum()],
+        },
+        schema=by_year.drop("a_over_e").schema,
+    ).with_columns(a_over_e=pl.col("actual") / pl.col("expected"))
+    return pl.concat([by_year, total])
+
+
+def roc_and_calibration(y_true, y_pred, title, max_prob=1.0):
+    fig, (ax_roc, ax_cal) = plt.subplots(1, 2, figsize=(10, 4.5))
+    RocCurveDisplay.from_predictions(y_true, y_pred, ax=ax_roc, name=title, plot_chance_level=True)
+    CalibrationDisplay.from_predictions(y_true, y_prob=y_pred, n_bins=10, strategy="quantile", ax=ax_cal, name=title)
+    ax_cal.set_xlim(0, max_prob)
+    ax_cal.set_ylim(0, max_prob)
+    ax_roc.set_title("ROC curve")
+    ax_cal.set_title("Calibration (10 equal-sized bands)")
+    fig.tight_layout()
+    return fig
+
+def eul_metrics(data: pl.DataFrame) -> dict:
+    actual = data["Incurred"].to_numpy()
+    pred = data["expected_cost"].to_numpy()
+    top_decile = pred >= np.quantile(pred, 0.9)
+    return {
+        "claims": data.height,
+        "actual_total": actual.sum(),
+        "predicted_total": pred.sum(),
+        "a_over_e": actual.sum() / pred.sum(),
+        "gini": gini(actual, pred),
+        "mae": mean_absolute_error(actual, pred),
+        "top_decile_cost_share": actual[top_decile].sum() / actual.sum(),
+    }

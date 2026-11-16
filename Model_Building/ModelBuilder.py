@@ -3,16 +3,18 @@ import lightgbm as lgb
 import numpy as np
 import pandas as pd
 import polars as pl
-from typing import List
+from typing import List, Dict
 
-from params.targets import NIL_TARGET, TARGET_COL
+from params.targets import NIL_TARGET, TARGET_COL, LARGE_LOSS_TARGET
 
 
 class ModelBuilder:
-    """Trains both parts of the hurdle model and combines them.
+    """Trains parts of the hurdle model and combines them.
 
     Part A (nil model): P(claim > 0), binary objective, fitted on all claims.
     Part B (severity):   E[capped cost | claim > 0], gamma objective, fitted on positive claims.
+    Part C (large loss model): P(large_loss)
+    large-loss load = P(large_loss) * mean(Incurred - Capped), binary objective, fitted on all claims.
     Expected cost = P(claim > 0) * E[capped cost | > 0] * large-loss load.
     """
 
@@ -22,6 +24,8 @@ class ModelBuilder:
         nil_params: dict,
         sev_features: list[str],
         sev_params: dict,
+        large_loss_features: list[str],
+        large_loss_params: dict,
         year_col: str = "loss_year",
         monotone_increasing: list[str] | None = None,
         seed: int = 42,
@@ -30,6 +34,8 @@ class ModelBuilder:
         self.nil_params = nil_params
         self.sev_features = sev_features
         self.sev_params = sev_params
+        self.large_loss_features = large_loss_features
+        self.large_loss_params = large_loss_params
         self.year_col = year_col
         self.monotone_increasing = set(monotone_increasing or [])
         self.seed = seed
@@ -37,6 +43,7 @@ class ModelBuilder:
         self.nil_model: lgb.LGBMClassifier | None = None
         self.sev_model: lgb.LGBMRegressor | None = None
         self.large_loss_load: float | None = None
+        self.mean_excess: float | None = None
         self.sev_balance: float | None = None
 
     # ---------- helpers ----------
@@ -54,20 +61,31 @@ class ModelBuilder:
     def _monotone_constraints(self, features: List[str]) -> list[int]:
         return [1 if f in self.monotone_increasing else 0 for f in features]
 
+
+    def fit_classifier(self, data: pl.DataFrame, target: str, constraints: List[list[int]], features: List[str], params: Dict[str, int]) -> lgb.LGBMClassifier:
+
+        y_class = data[target].to_numpy()
+        model = lgb.LGBMClassifier(
+            objective="binary",
+            interaction_constraints=constraints,
+            random_state=self.seed,
+            verbose=-1,
+            subsample_freq=1,
+            **params,
+        ).fit(self._X(data, features), y_class)
+
+        return model
+
     def fit(self, train: pl.DataFrame) -> "ModelBuilder":
         constraints_nil = self._interaction_constraints(self.nil_features)
 
         # Part A: nil model on all training claims
-        y_nil = train[NIL_TARGET].to_numpy()
-        self.nil_model = lgb.LGBMClassifier(
-            objective="binary",
-            interaction_constraints=constraints_nil,
-            random_state=self.seed,
-            verbose=-1,
-            **self.nil_params,
-        ).fit(self._X(train, self.nil_features), y_nil)
+
+        self.nil_model = self.fit_classifier(train, target=NIL_TARGET, constraints=constraints_nil, features=self.nil_features, params=self.nil_params)
+
 
         # Part B: severity model on positive training claims, capped target
+        # TODO: make this a fit regressor() so I can fit a large loss model to this as well. 
         pos = train.filter(pl.col(NIL_TARGET) == 1)
         constraints_sev = self._interaction_constraints(self.sev_features)
         self.sev_model = lgb.LGBMRegressor(
@@ -76,6 +94,7 @@ class ModelBuilder:
             monotone_constraints=self._monotone_constraints(self.sev_features),
             random_state=self.seed,
             verbose=-1,
+            subsample_freq=1,
             **self.sev_params,
         ).fit(
             self._X(pos, self.sev_features),
@@ -86,8 +105,17 @@ class ModelBuilder:
         X_pos = self._X(pos, self.sev_features)
         self.sev_balance = pos[TARGET_COL].sum() / self.sev_model.predict(X_pos).sum()
 
-        # Large-loss load from training data only
+        # Large-loss load from training data only - keep for comparison
         self.large_loss_load = pos["Incurred"].mean() / pos[TARGET_COL].mean()
+        
+        # Average excess for large claims
+        large = train.filter(pl.col(LARGE_LOSS_TARGET) == 1)
+        self.mean_excess = (large["Incurred"] - large[TARGET_COL]).mean()
+
+        # Fit large loss classifier
+        constraints_large_loss = self._interaction_constraints(self.large_loss_features)
+        self.large_loss_model = self.fit_classifier(train, target=LARGE_LOSS_TARGET, constraints=constraints_large_loss, features=self.large_loss_features, params=self.large_loss_params)
+        
         return self
 
     # ---------- prediction ----------
@@ -110,14 +138,23 @@ class ModelBuilder:
 
         X_nil = self._X(data, self.nil_features)
         X_sev = self._X(data, self.sev_features)
+        X_large_loss = self._X(data, self.large_loss_features)
         p = self.nil_model.predict_proba(X_nil)[:, 1]
         sev = self.sev_model.predict(X_sev) * self.sev_balance
+        p_large_loss = self.large_loss_model.predict_proba(X_large_loss)[:, 1]
+
+        expected_capped = p * sev
+        expected_excess = p_large_loss * self.mean_excess
+
         return pl.DataFrame(
             {
                 "p_nonnil": p,
                 "severity_capped": sev,
-                "expected_capped": p * sev,
-                "expected_cost": p * sev * self.large_loss_load,
+                "expected_capped": expected_capped,
+                "p_large_loss": p_large_loss,
+                "expected_excess": expected_excess,
+                "expected_cost": expected_capped + expected_excess,
+                "expected_cost_flat_load": expected_capped * self.large_loss_load, # Keep for comparison 
             }
         )
 
