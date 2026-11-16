@@ -21,9 +21,9 @@ def cast_strings_to_categorical(
 
 
 def standardise_columns(data: pl.DataFrame) -> pl.DataFrame:
-    data = data.rename({"Vechile_registration_present": "Vehicle_registration_present"})
     # Replace all spaces in column headings with a underscore for cleaner titles
     data.columns = [col.replace(" ", "_") for col in data.columns]
+    data = data.rename({"Vechile_registration_present": "Vehicle_registration_present"}, strict=False)
     return data
 
 
@@ -57,7 +57,7 @@ def drop_low_cardinality_features(data: pl.DataFrame) -> pl.DataFrame:
         "TP_type_pass_multi",
         "Vehicle_registration_present",
     ]
-    return data.drop(cols_to_drop)
+    return data.drop(cols_to_drop, strict=False)
 
 
 def ph_considered_at_fault_correction(data: pl.DataFrame) -> pl.DataFrame:

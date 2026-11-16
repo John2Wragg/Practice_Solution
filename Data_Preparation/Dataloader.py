@@ -21,6 +21,23 @@ from params.targets import TARGET_COL
 from params.generic_params import CAP_VALUE
 
 
+def prepare_features(data: pl.DataFrame) -> pl.DataFrame:
+        """Feature steps, using only fields known at first notification.
+
+        Shared by training and the API so both build features the same way.
+        """
+        return (
+            data.pipe(parse_loss_date)
+            .pipe(standardise_columns)
+            .pipe(correct_notification_period)
+            .pipe(weather_correction)
+            .pipe(drop_low_cardinality_features)
+            .pipe(ph_considered_at_fault_correction)
+            .pipe(add_tp_features)
+            .pipe(cast_strings_to_categorical)
+        )
+
+
 class Dataloader:
     def __init__(self, path: str):
         self.path = path
@@ -32,20 +49,17 @@ class Dataloader:
         # validate with the Pandera schema here
         return clean
 
-    def prepare(self, data):
+
+    def add_targets(self, data: pl.DataFrame) -> pl.DataFrame:
+        """Target steps, which need the claim outcome. Training only."""
         return (
-            data.pipe(parse_loss_date)
-            .pipe(standardise_columns)
-            .pipe(correct_notification_period)
-            .pipe(drop_negative_claim_amounts)
+            data.pipe(drop_negative_claim_amounts)
             .pipe(create_non_null_flag)
-            .pipe(weather_correction)
-            .pipe(drop_low_cardinality_features)
-            .pipe(ph_considered_at_fault_correction)
-            .pipe(add_tp_features)
-            .pipe(cast_strings_to_categorical)
             .pipe(create_large_loss_flag)
         )
+    
+    def prepare(self, data):
+        return self.add_targets(prepare_features(data))
 
     def split_data(
         self,
