@@ -1,0 +1,10 @@
+*.parquet
+*.json
+*.csv
+*.pyc
+*.joblib
+*.png
+*.html
+*.DS_Store
+mlflow.db
+mlruns/
