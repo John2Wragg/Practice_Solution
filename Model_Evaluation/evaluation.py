@@ -248,7 +248,7 @@ def roc_and_calibration(y_true, y_pred, title, max_prob=1.0):
     fig.tight_layout()
     return fig
 
-def eul_metrics(data: pl.DataFrame) -> Dict:
+def eul_metrics(data: pl.DataFrame) -> dict:
     actual = data["Incurred"].to_numpy()
     pred = data["expected_cost"].to_numpy()
     top_decile = pred >= np.quantile(pred, 0.9)

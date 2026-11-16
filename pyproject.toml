@@ -31,3 +31,6 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["functions", "params", "Data_Preparation", "Model_Building", "Model_Evaluation"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
