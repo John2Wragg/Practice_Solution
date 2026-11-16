@@ -8,3 +8,4 @@
 *.DS_Store
 mlflow.db
 mlruns/
+/serving_model
